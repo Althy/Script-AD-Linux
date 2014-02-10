@@ -1,0 +1,210 @@
+# SAUVEGARDE
+creation_archive() {
+  user=$1
+  savedate=`date +%y%m%d_%H%M`
+
+  [ ! -d $rep_archives/$user ] && mkdir -p $rep_archives/$user
+
+  rep_user=`awk -v var=$user -F: '{ if ( var == $1 ) print $6 }' /etc/passwd`  
+
+  cd `dirname $rep_user`
+  tar -cf $rep_archives/$user/${savedate}.tar $user
+  cd - > /dev/null
+
+  print "\nTraitement de l archive de l'utilisateur $user effectuee.\n"
+  print "$(date +%Y%m%d) - $(uname -n) : archive de $user cree." >> $fic_log
+}
+
+creation_archive_liste () {
+  if [ -z $1 ] ; then
+     print -u2 "Erreur: Aucun utilisateur existe - la procedure est arrete."
+     exit 1
+  fi
+
+  IFS=" "
+  set $*
+  while [ $# -ne 0 ]
+  do
+    creation_archive $1
+    shift
+  done
+} 
+
+# Fonction RESTAURATION
+
+extraction_archive () {
+  if [ -f $rep_archives/$1/$2 ]
+  then
+    rep_user=`awk -v var=$1 -F: '{ if ( var == $1 ) print $6 }' /etc/passwd`  
+    rm -rf $rep_user
+    cd `dirname $rep_user`
+    tar -xf $rep_archives/$1/$2
+    cd -  > /dev/null
+    print "\nLa restauration de l archive $2 de l'utilisateur $1 est terminee.\n"
+    print "$(date +%Y%m%d) - $(uname -n) : archive de $user restauree." >> $fic_log
+  else
+    print -u2 "L'archive $2 n'existe pas pour l utilisateur $1"
+  fi
+}
+
+extraction_archive_liste () {
+  if [ -z $1 ] ; then
+     print -u2 "Erreur: Aucun utilisateur existe - la procedure est arrete."
+     exit 1
+  fi
+
+  for user in $* 
+  do
+    if [ -d $rep_archives/$user ] 
+    then
+      extraction_archive $user `ls -t $rep_archives/$user | head -1`
+    else 
+      print -u2 "Erreur: Absence d'archive pour $user" 
+      continue
+    fi
+  done
+}
+
+# Fonction creation archive
+menu_creation_archive() {
+   # nom user
+   if ! saisie_nom user
+   then return 1
+   fi
+
+   if existe user $nom
+   then
+      creation_archive $nom
+   else
+      print "\nL utilisateur $nom n existe pas.\n"
+   fi   
+}
+
+# Fonction lister archive
+menu_lister_archive() {
+   # nom user
+   if ! saisie_nom user
+   then return 1
+   fi
+
+   if existe user $nom
+   then
+      if [ -d $rep_archives/$nom ]
+      then
+        OLDPS3="$PS3"
+        PS3="Selectionner l archive : "
+        select choix in `ls $rep_archives/$nom` "Quitter"
+        do
+          if [ $choix == "Quitter" ] 
+          then break
+          else 
+            print "\nDetail de l archive $choix de ${nom}:"
+            tar -tvf $rep_archives/$nom/$choix | more
+            print ""
+            break
+          fi
+        done
+        PS3="$OLDPS3"
+      else
+        print "\nAbsence d archives pour ${nom}.\n"
+      fi
+   else
+      print "\nL utilisateur $nom n existe pas.\n"
+   fi   
+}
+
+# Fonction lister archive
+menu_extraction_archive() {
+   # nom user
+   if ! saisie_nom user
+   then return 1
+   fi
+
+   if existe user $nom
+   then
+      if [ -d $rep_archives/$nom ]
+      then
+        OLDPS3="$PS3"
+        PS3="Selectionner l archive : "
+        select choix in `ls $rep_archives/$nom` "Quitter"
+        do
+          if [ $choix == "Quitter" ] 
+          then break
+          else 
+            extraction_archive $nom $choix
+            break
+          fi
+        done
+        PS3="$OLDPS3"
+      else
+        print "\nAbsence d archives pour ${nom}.\n"
+      fi
+   else
+      print "\nL utilisateur $nom n existe pas.\n"
+   fi   
+}
+
+# Fonction lister archive
+menu_supprimer_archive() {
+   # nom user
+   if ! saisie_nom user
+   then return 1
+   fi
+
+   if existe user $nom
+   then
+      if [ -d $rep_archives/$nom ]
+      then
+        OLDPS3="$PS3"
+        PS3="Selectionner l archive : "
+        print "\n#################################################"
+        print "ATTENTION: l archive sera defectivement suprimee."
+        print "#################################################\n"
+        select choix in `ls $rep_archives/$nom` "Quitter"
+        do
+          if [ $choix == "Quitter" ] 
+          then break
+          else 
+            rm -rf $rep_archives/$nom/$choix
+            print "\nL archive $choix est suprimee.\n"
+            print "$(date +%Y%m%d) - $(uname -n) : archive $choix de $nom suprimee." >> $fic_log
+            break
+          fi
+        done
+        PS3="$OLDPS3"
+      else
+        print "\nAbsence d archives pour ${nom}.\n"
+      fi
+   else
+      print "\nL utilisateur $nom n existe pas.\n"
+   fi   
+}
+
+# Fonction suppression de toutes les archives
+
+menu_suppression_full_archives () {
+   # nom user
+   if ! saisie_nom user
+   then return 1
+   fi
+
+   if existe user $nom
+   then
+     print "\n#################################################"
+     print "ATTENTION: toutes les archives seront supprimees."
+     print "#################################################\n"
+     print "Confirmez-vous la suppression (oui/non) ? \c"
+     read rep
+     if [ $rep == "oui" -o $rep == "OUI" -o $rep == "o" -o $rep == "O" ]
+     then
+       rm -rf $rep_archives/$nom 2> /dev/null
+       print "\nLes archives de $nom sont suprimees.\n"
+       print "$(date +%Y%m%d) - $(uname -n) : archives de $nom suprimees." >> $fic_log
+     else
+       print "\nProcedure de suppression ANNULEE.\n"
+     fi
+   else
+     print "\nL utilisateur $nom n existe pas.\n"
+   fi
+}
+

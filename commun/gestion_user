@@ -1,0 +1,302 @@
+# ##################################################################
+#               GESTION DES UTILISATEURS                          #
+# ##################################################################
+#
+# Cette fonction affiche les informations sur un compte
+function affiche_user 
+{
+  # Saisie du nom du compte
+  saisie_nom user
+ 
+  # Vérifier que le compte existe
+  if ! existe user $nom ; then
+    echo -e "\n$nom n'existe pas dans /etc/passwd"
+  else
+    ligne=`grep -i "^$nom:" /etc/passwd`
+    echo -e "\nInformations sur le compte $nom\n"
+    IFS=: # Internal File Separator. Permet à la commande suivant d'identifier les champs de la variable $ligne et de redéfnir le contenu des variables de position ($1, $2, ...)
+    set $ligne
+    echo -e "Nom de connexion : $1\n"
+    echo -e "Numéro de l'utilisateur : $3\n"
+    echo -e "Numéro du groupe : $4\n"
+    echo -e "Nom du shell de connexion : $7\n"
+    echo -e "Nom du répertoire de connexion : $6\n"
+  fi
+}
+
+# Cette fonction cree un compte utilisateur
+function cree_user
+{
+  while(true) ; do
+  # Saisie du nom du compte
+  saisie_nom user
+  leuser=$nom
+  
+  # Vérifier que le compte n'existe pas déjà
+  if ! existe user $leuser ; then
+   # Saisie sécurisée du numéro du compte (UID)
+   while(true) ; do
+     echo -e "\nNuméro UID : \c"
+     read uid
+
+     expr ":$uid:" : ':[0-9]\{3,5\}:' > /dev/null
+     if [ $? != 0 ] ; then
+       echo "Saisie incorrecte. Recommencer"
+     else
+       # Vérifier que l'UID n'existe pas dans /etc/passwd
+       grep "^.*:x:$uid:" /etc/passwd > /dev/null
+       if  (( $? == 0 ))
+       then
+         echo "$uid existe dans /etc/passwd"
+         echo "Saisir un autre numéro."
+       else
+         break
+       fi
+     fi
+   done
+   
+   # Saisie du numéro du groupe (GID)
+   while (true) ; do
+     echo -e "\nNuméro GID : \c"
+     read gid
+
+     expr ":$gid:" : ':[0-9]\{3,5\}:$' > /dev/null
+     if (( $? != 0 )) ; then
+       echo "Saisie incorrecte. Recommencer"
+     else
+       # Vérifier que le GID existe dans /etc/group
+       # Sinon, le créer
+       grep "^.*:x:$gid:$" /etc/group > /dev/null
+       if (( $? != 0 )) ; then
+         echo "Le gid $gid n'existe pas dans /etc/group"
+         echo
+         echo "Création de $gid"
+         echo -e  "Il est nécessaire de saisir le nom du groupe et le gid.\n"
+         # Appel de cree_group
+         cree_group
+       fi
+       break
+     fi
+   done
+
+   # Nom du répertoire de connexion
+   rep="$BASE_HOME/$leuser"
+   
+   # Saisie du shell
+   while (true) ; do
+     echo -e "\nNom du shell parmi la liste suivante : "
+     echo "$(cat /etc/shells)"
+     echo -e "\nVotre choix : \c"
+     read shell
+
+     grep "^$shell$" /etc/shells > /dev/null
+     if (( $? != 0 )) ; then
+       echo "Saisie incorrecte. Recommencer"
+     else
+       break
+     fi
+   done 
+
+   # Mot de passe 
+   echo -e "\nMot de passe : \c"
+   read mdp
+   echo -e "\n"
+   
+   # Rajouter le nouvel utilisateur
+   /usr/sbin/useradd -u $uid -g $gid -m -d $rep -s $shell -p $mdp $leuser > /dev/null
+   if [ $? == 0 ] ; then
+     echo -e "\nL'utilisateur $leuser a bien été créé "
+     echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $leuser est cree." >> $fic_log
+   else
+     echo -e "\nEchec de création de $leuser\n"
+   fi
+   break
+  else 
+    echo "$leuser existe dans /etc/passwd"
+    echo "Saisir un autre nom."
+    echo
+  fi
+ done
+}
+
+# Cette fonction supprime un compte
+function delete_user 
+{
+  while(true) ; do
+  # Saisie du nom du compte
+  saisie_nom user
+  leuser=$nom
+    # Vérifier que le compte existe déjà
+  if existe user $leuser ; then
+
+   # Supprimer un utilisateur
+   /usr/sbin/userdel -f $leuser > /dev/null
+   if [ $? == 0 ] ; then
+     echo -e "\nL'utilisateur $leuser a bien été supprimé "
+     echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $leuser est supprimé." >> $fic_log
+   else
+     echo -e "\nEchec de suppression de $leuser\n"
+   fi
+   break
+  else 
+    echo "$leuser n'existe pas dans /etc/passwd"
+    echo "Saisir un autre nom."
+    echo
+  fi
+ done
+}
+
+# Cette fonction modifie les informations d'un compte
+function modif_user
+{
+ while (true) ; do
+ # Saisie du nom du compte
+ saisie_nom user
+ 
+ # Verifier que le compte existe 
+ if ! existe user $nom ; then
+   echo -e "\n$nom n'existe pas. Recommencer\n"
+ else
+   ligne=`grep -i "^$nom:" /etc/passwd`
+   IFS=:
+   set $ligne
+   echo -e "\nChamps à modifier : \
+           \n\t1. Nom de connexion : $1\
+           \n\t2. Numéro UID : $3\
+           \n\t3. Numéro GID : $4\
+           \n\t4. Shell de connexion : $7\
+           \n\t5. Répertoire de connexion : $6\n"
+   echo -e "\nSaisir votre choix : "
+   read choix
+   while (( $choix < 1 || $choix > 5 )) ; do
+     echo -e "Choix incorrect. Saisir un autre choix : "
+     read choix
+   done
+
+   case $choix in
+   1) while(true) ; do
+        saisie_nom user
+        /usr/sbin/usermod -l $nom $1 > /dev/null
+        if (( $? == 0 )) ; then
+          echo -e "$1 a été modifié avec succès."
+          echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom a ete modifie." >> $fic_log
+          break
+        else
+          echo -e "Echec de modification. Recommencer\n"
+        fi
+      done
+      ;;
+   2) while (true) ; do
+        echo -e "\nSaisir le nouveau numéro UID : "
+        read uid
+        /usr/sbin/usermod -u $uid $nom >/dev/null
+        if (( $? == 0 )) ; then
+          echo -e "\n$nom a été modifié avec succès."
+          echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom a ete modifie." >> $fic_log
+          break
+        else 
+          echo -e "Echec de modification. Recommencer"
+        fi
+      done
+      ;;
+   3) while (true) ; do
+        echo -e "\nSaisir le nouveau numéro GID : "
+        read gid
+        /usr/sbin/usermod -g $gid $nom >/dev/null
+        if (( $? == 0 )) ; then
+          echo -e "\n$nom a été modifié avec succès."
+          echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom a ete modifie." >> $fic_log
+          break
+        else
+          echo -e "Echec de modification. Recommencer"
+        fi
+      done
+      ;;
+   4) while (true) ; do
+        echo -e "\nSaisir le shell dans la liste :\n"
+        cat /etc/shells
+        echo -e "\nNouveau shell : "
+        read shell
+    
+        if ! grep "^$shell$" /etc/shells > /dev/null 
+        then echo -e "Shell incorrect. Recommencer"
+             continue
+        fi
+        /usr/sbin/usermod -s $shell $nom > /dev/null
+        if (( $? == 0 )) ; then
+          echo -e "\n$nom a été modifié avec succès."
+          echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom a ete modifie." >> $fic_log
+          break
+        else
+          echo -e "Echec de modification. Recommencer"
+        fi
+      done
+      ;;
+   5) while (true) ; do
+        echo -e "\nSaisir le répertoire de connexion : "
+        read rep
+        if [ "/" != `echo $rep | cut -c1` ] ; then
+          echo -e "\nAttention, le répertoire spécifié doit être un chemin absolu. Recommencer"
+          continue
+        fi
+        /usr/sbin/usermod -d $rep -m $nom > /dev/null
+        if (( $? == 0 )) ; then
+          echo -e "\n$nom a été modifié avec succès."
+          echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom a ete modifie." >> $fic_log
+          break
+        else
+          echo -e "Echec de modification. Recommencer"
+        fi
+      done
+      ;;
+   esac
+   break
+ fi
+ done
+}
+
+# Cette fonction crée une liste d'utilisateurs qui se trouvent dans un \
+# fichier. Ce dernier contient également les informations nécessaires à \
+# la création des comptes
+# Chaque ligne du fichier contient les données suivantes :
+# prenom nom nom_du_groupe nom_shell
+# Les champs sont séparés par des espaces
+
+function cree_liste_user 
+{
+  UID_DEB=`cat /etc/passwd | cut -d: -f3 | sort -n | tail -2 | head -1`
+  uid=`expr $UID_DEB + 1`
+ 
+  echo -e "\nSaisir le nom de la base qui contient les comptes à créer : "
+  read base
+
+  # Vérifier l'existence du fichier
+  if [ ! -f $base ] ; then
+    echo -e "\n $base n'existe pas \n"
+    mavar=`ls -l $base` ; echo "ls:$mavar"
+  else
+
+    while read prenom nom groupe shell
+    do
+      if ! existe group $groupe
+      then
+        echo -e "\nLe groupe $groupe n'existe pas."
+        /usr/sbin/groupadd $groupe > /dev/null 2>&1
+        echo -e "\nLe groupe $groupe est cree."
+        echo "$(date +%Y%m%d) - $(uname -n) : groupe $groupe est cree." >> $fic_log
+      fi
+
+      /usr/sbin/useradd -u $uid -g $groupe -m -d $BASE_HOME/$nom -s /bin/$shell -c "$prenom $nom" -p $prenom $nom
+      if [ $? == 0 ] ; then
+        echo -e "\n$nom a été créé avec succès\n"
+        echo "$(date +%Y%m%d) - $(uname -n) : utilisateur $nom est cree." >> $fic_log
+        ((uid+=1))
+      else
+        echo -e "\nEchec de création de $nom\n"
+      fi
+    done < $base
+
+  fi
+}
+
+

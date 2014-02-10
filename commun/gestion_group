@@ -1,0 +1,159 @@
+###################################################################
+# GESTION DES GROUPES                     			  #
+###################################################################
+#
+# Cette fonction crée un groupe
+function cree_group
+{
+  while (true) ; do
+  # Saisie du nom du groupe
+  saisie_nom group
+ 
+  # Vérifier que le groupe n'existe pas
+  if ! existe group $nom ; then
+    # Saisie sécurisée du numéro du groupe (GID)
+    while(true) ; do
+      echo -e  "\nNuméro GID : \c"
+      read gid
+
+      expr ":$gid:" : ':[0-9]\{2,5\}:' > /dev/null
+      if (( $? != 0 )) ; then
+        print "Mauvaise saisie. Recommencer"
+      else
+        # Vérifier que le GID n'existe pas dans /etc/group
+        grep "^.*:x:$gid:" /etc/group > /dev/null
+        if (( $? == 0 ))
+        then
+          print "$gid existe dans /etc/group"
+          print "Saisir un autre numéro."
+        else
+          /usr/sbin/groupadd -g $gid $nom > /dev/null 2>&1
+          if (( $? == 0 )) ; then
+            echo -e  "\nLe groupe $nom a bien été créé."
+            echo -e "$(date +%Y%m%d) - $(uname -n) : groupe $nom est cree." >> $fic_log
+          else
+            echo -e  "\nEchec de création de $nom"
+          fi
+          break
+        fi
+      fi
+    done
+
+    break
+
+  else
+    echo -e  "\n$nom existe dans /etc/group"
+    echo -e  "\nSaisir un autre nom\n\n"
+  fi
+
+ done
+}
+
+# Cette fonction modifie un groupe
+function modif_group
+{
+  while (true) ; do
+  # Saisie du nom du groupe
+  saisie_nom group
+
+  # Vérifier que le groupe existe 
+  if existe group $nom ; then
+    ligne=`grep -i "^$nom:" /etc/group`
+    IFS=:
+    set $ligne
+    echo -e  "\nListe des champs à modifier \
+            \n\t 1. Nom du groupe : $1\
+            \n\t 2. Numéro du groupe: $3\n"
+  
+    while (true) ; do
+    echo -e  "\nSaisir votre choix : "
+    read choix
+    expr "$choix" : '[12]\{1\}' > /dev/null 2>&1
+    if (( $? != 0 )) ; then
+      echo -e  "Saisie incorrecte. Recommencer.\n"
+    else
+      if (( $choix == 1 )) ; then
+        saisie_nom group
+        echo -e  "\n"
+        /usr/sbin/groupmod -n $nom $1 > /dev/null
+        if (( $? != 0 )) ; then
+          echo -e  "Echec de modification. Recommencer\n"
+        else
+          echo -e "\nModification réussie"
+	  echo -e "$(date +%Y:%m:%d) - $(uname -n) : Le nouveau NOM est: $nom."
+          echo -e "$(date +%Y:%m:%d) - $(uname -n) : Le nouveau NOM est: $nom." >> $fic_log
+          break
+        fi
+      elif (( $choix == 2 )) ; then
+        echo -e  "\nSaisir le numéro de groupe : "
+        read gid
+        echo -e  "\n"
+        /usr/sbin/groupmod -g $gid $1 > /dev/null
+        if (( $? != 0 )) ; then
+          echo -e  "Echec de modification. Recommencer\n"
+        else
+          echo -e "Modification réussie"
+	  echo -e "$(date +%Y:%m:%d) - $(uname -n) : Le nouveau GID est: $gid."
+          echo -e "$(date +%Y:%m:%d) - $(uname -n) : Le nouveau GID est: $gid." >> $fic_log
+          break
+        fi
+      fi
+    fi
+  done
+  break
+ else
+   echo -e  "\n$nom n'existe pas.\n\n"
+ fi
+ done
+}
+   
+# Cette fonction supprime un groupe
+function delete_group {
+ while (true) ; do
+   # Saisie du nom du groupe
+   saisie_nom group
+   # Vérifier que le groupe existe
+   if existe group $nom ; then
+      echo -e "\n |-----> $nom existe"
+      while(true) ; do
+	/usr/sbin/groupdel $nom > /dev/null 2>&1
+      	if (( $? == 0 )) ; then
+           echo -e  "\nLe groupe $nom a bien été supprimé."
+           echo -e "$(date +%Y:%m:%d) - $(uname -n) : groupe $nom est supprimé." >> $fic_log
+	   break
+       	else
+	   echo -e  "\nEchec de supression de $nom"
+	fi
+      done
+    else
+        echo -e  "\n$nom n'existe pas dans /etc/group"
+        echo -e  "\nSaisir un autre nom\n\n"
+    fi
+    break
+  done
+}
+
+# Cette fonction affiche des informations sur un groupe
+function affiche_group {
+  while (true) ; do
+    # Saisie du nom du groupe
+    saisie_nom group
+  
+    # Vérifier que le groupe existe 
+    if existe group $nom ; then 
+      ligne=`grep -i "^$nom:" /etc/group`
+      IFS=:
+      set $ligne
+      echo -e  "\nNom du groupe : $1"
+      echo -e  "\nNuméro du groupe : $3"
+      echo -e  "\nListe des membres du groupe : \n"
+      grep ".*:x:[0-9]*:$3:" /etc/passwd > membres
+      awk -F: '{print $1}' membres
+      rm membres
+      break
+    elif [ ! -z $nom ] ; then
+      echo -e  "\n$nom n'existe pas dans /etc/group.\n\n"
+    fi
+  done
+}
+ 

@@ -1,0 +1,40 @@
+# Fonction de test d existence d un user et d un groupe
+existe () {
+   case "$1" in
+     'user')  grep "^$2:" /etc/passwd > /dev/null && return 0
+              return 1
+              ;;
+      'group') grep "^$2:" /etc/group > /dev/null && return 0
+               return 1
+               ;;
+       *)      echo "Option incorrecte."
+               ;;
+   esac
+}
+
+# Fonction pause
+pause() {
+  echo -e  "\n\n  Tapez sur RETURN pour continuer"
+  read suite
+}
+
+# Fonction saisie du nom du user
+saisie_nom() {
+  case "$1" in
+    'user')  echo -e  "Saisir le nom de l utilisateur : \c"
+             ;;
+    'group') echo -e  "Saisir le nom du groupe : \c"
+             ;;
+     *)      echo "Option incorrecte."
+             ;;
+  esac
+
+  read nom   
+   
+  if [ -z $nom ] ; then
+     echo -e  "\nIl est necessaire de saisir un nom !\n" 
+     return 1 
+  else
+     return 0
+  fi
+}
